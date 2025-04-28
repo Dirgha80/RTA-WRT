@@ -37,6 +37,7 @@ on:
           - OPHUB Amlogic s905X2 KM3
           - OPHUB Amlogic s905X2 X96 Max 2G
           - OPHUB Amlogic s905X3
+          - OPHUB Amlogic s905X4
           - OPHUB Amlogic s905X3 H96 Max
           - OPHUB Amlogic s905X3 HK1
           - OPHUB Amlogic s905X3 X96 Max
@@ -140,6 +141,7 @@ jobs:
               "OPHUB Amlogic s905X2",
               "OPHUB Amlogic s905X2 KM3",
               "OPHUB Amlogic s905X2 X96 Max 2G",
+              "OPHUB Amlogic s905X3",
               "OPHUB Amlogic s905X3",
               "OPHUB Amlogic s905X3 H96 Max",
               "OPHUB Amlogic s905X3 HK1",
@@ -359,6 +361,9 @@ jobs:
               ;;
             "OPHUB Amlogic s905X HG680P")
               configure_arm_device "s905x" "5.15.y_6.1.y" "OPHUB"
+              ;;
+            "OPHUB Amlogic s905x4")
+              configure_arm_device "s905x4" "6.12.Y" "OPHUB"
               ;;
             "OPHUB Amlogic s905X B860H")
               configure_arm_device "s905x-b860h" "5.15.y_6.1.y" "OPHUB"
