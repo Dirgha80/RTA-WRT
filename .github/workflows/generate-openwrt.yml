@@ -45,6 +45,7 @@ on:
           - OPHUB Amlogic s912 H96 Pro Plus
           - OPHUB Amlogic s912 X92
           - OPHUB Rockchip rk3318 H96-MAX
+          - OPHUB Amlogic HG680-FJ
           - ULO Amlogic s905X HG680P
           - ULO Amlogic s905X B860H
           - ULO Amlogic s905X2
@@ -175,6 +176,7 @@ jobs:
               "OPHUB Amlogic s905X3 HK1",
               "OPHUB Amlogic s905X3 X96 Max",
               "OPHUB Amlogic s905x4 advan",
+              "OPHUB Amlogic HG680-FJ
               "OPHUB Amlogic s912",
               "OPHUB Amlogic s912 H96 Pro Plus",
               "OPHUB Amlogic s912 X92",
@@ -432,6 +434,9 @@ jobs:
               ;;
             "OPHUB Amlogic s905x4 advan")
               configure_arm_device "s905x4-advan" "${{ inputs.openwrt_kernel }}" "OPHUB"
+              ;; 
+            "OPHUB Amlogic HG680-FJ")
+              configure_arm_device "s905x2-hg680-fj" "${{ inputs.openwrt_kernel }}" "OPHUB"
               ;; 
               
             # ULO Amlogic devices
