@@ -119,25 +119,7 @@ setup_nikki() {
 }
 
 # Function to remove icons from theme files
-remove_icons() {
-    local icons=("$@")
-    local paths=(
-        "files/usr/share/ucode/luci/template/themes/material/header.ut"
-        "files/usr/lib/lua/luci/view/themes/argon/header.htm"
-    )
-    
-    for icon in "${icons[@]}"; do
-        for path in "${paths[@]}"; do
-            if [[ -f "${path}" ]]; then
-                log "DEBUG" "Removing icon ${icon} from ${path}"
-                sed -i "/${icon}/d" "${path}" || \
-                    log "WARNING" "Failed to remove icon ${icon} from ${path}"
-            else
-                log "WARNING" "Theme file not found: ${path}"
-            fi
-        done
-    done
-}
+
 
 # Main function
 main() {
@@ -149,30 +131,24 @@ main() {
     case "$1" in
         openclash)
             setup_openclash || rc=1
-            remove_icons "passwall.png" "mihomo.png"
             ;;
         passwall)
             setup_passwall || rc=1
-            remove_icons "clash.png" "mihomo.png"
             ;;
         nikki)
             setup_nikki || rc=1
-            remove_icons "clash.png" "passwall.png"
             ;;
         openclash-passwall)
             setup_openclash || rc=1
             setup_passwall || rc=1
-            remove_icons "mihomo.png"
             ;;
         nikki-passwall)
             setup_nikki || rc=1
             setup_passwall || rc=1
-            remove_icons "clash.png"
             ;;
         nikki-openclash)
             setup_nikki || rc=1
             setup_openclash || rc=1
-            remove_icons "passwall.png"
             ;;
         all-tunnel)
             log "INFO" "Installing all tunnel packages"
@@ -182,7 +158,6 @@ main() {
             ;;
         no-tunnel)
             log "INFO" "Using no tunnel packages"
-            remove_icons "clash.png" "passwall.png" "mihomo.png"
             ;;
         *)
             log "ERROR" "Invalid option. Usage: $0 {openclash|passwall|nikki|openclash-passwall|nikki-passwall|nikki-openclash|all-tunnel|no-tunnel}"
