@@ -67,6 +67,7 @@ rename_firmware() {
         "_amlogic_s912_|Amlogic_s912"
         "_amlogic_s905x2_|Amlogic_s905x2"
         "_amlogic_s905x3_|Amlogic_s905x3"
+        "_s905x4-advan_|Amlogic_s905x4_advan"
         "_s905_|Amlogic_s905"
         "_s905-beelink-mini_|Amlogic_s905-Beelink_Mini"
         "_s905-mxqpro-plus_|Amlogic_s905-MXQPro_Plus"
