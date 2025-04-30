@@ -55,6 +55,7 @@ rename_firmware() {
         "-s905x4-|Amlogic_s905x4"
 
         "_amlogic_s912_|Amlogic_s912"
+        "_s905x4-advan_|Amlogic_s905x4_advan"
         "_amlogic_s905x2_|Amlogic_s905x2"
         "_amlogic_s905x3_|Amlogic_s905x3"
         "_s905_|Amlogic_s905"
