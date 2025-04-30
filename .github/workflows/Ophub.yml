@@ -13,7 +13,7 @@ on:
           - openwrt:23.05.5
           - immortalwrt:24.10.1
           - immortalwrt:23.05.4
-      rootfs_size:
+      openwrt_size:
         description: "ROOTFS Size, (512, 640, 756, 1024)"
         required: true
         default: "512"    
@@ -556,7 +556,7 @@ jobs:
         run: |
           cd ${WORKING_DIR}
           chmod +x scripts/REPACKWRT.sh
-          ./scripts/REPACKWRT.sh "ophub" "$TARGET_BUILD" "$KERNEL" "${{ env.TUNNEL }}"
+          ./scripts/REPACKWRT.sh "ophub" "$TARGET_BUILD" "$KERNEL" "${{ inputs.openwrt_size }}" "${{ env.TUNNEL }}"
           echo "status=success" >> $GITHUB_OUTPUT
           
       - name: Mod SDCard
