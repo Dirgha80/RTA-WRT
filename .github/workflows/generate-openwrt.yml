@@ -24,6 +24,7 @@ on:
           - Raspberry Pi 4B
           - x86-64
           - OPHUB Amlogic s905
+          - OPHUB Amlogic s905x4 advan
           - OPHUB Amlogic s905 Beelink Mini
           - OPHUB Amlogic s905 MXQ Pro Plus
           - OPHUB Amlogic s905W
@@ -145,6 +146,7 @@ jobs:
               "OPHUB Amlogic s905X3 H96 Max",
               "OPHUB Amlogic s905X3 HK1",
               "OPHUB Amlogic s905X3 X96 Max",
+              "OPHUB Amlogic s905x4 advan",
               "OPHUB Amlogic s912",
               "OPHUB Amlogic s912 H96 Pro Plus",
               "OPHUB Amlogic s912 X92",
@@ -400,6 +402,9 @@ jobs:
             "OPHUB Rockchip rk3318 H96-MAX")
               configure_arm_device "rk3318-box" "6.1.y" "OPHUB"
               ;;
+            "OPHUB Amlogic s905x4 advan")
+              configure_arm_device "s905x4-advan" "6.6.y_6.12.y" "OPHUB"
+              ;; 
               
             # ULO Amlogic devices
             "ULO Amlogic s905X HG680P")
