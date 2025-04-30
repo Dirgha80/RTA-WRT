@@ -433,10 +433,10 @@ jobs:
               configure_arm_device "rk3318-box" "6.1.y" "OPHUB"
               ;;
             "OPHUB Amlogic s905x4 advan")
-              configure_arm_device "s905x4-advan" "${{ inputs.openwrt_kernel }}" "OPHUB"
+              configure_arm_device "s905x4-advan" "6.6.y_6.12.y" "OPHUB"
               ;; 
             "OPHUB Amlogic HG680-FJ")
-              configure_arm_device "s905x2-hg680-fj" "${{ inputs.openwrt_kernel }}" "OPHUB"
+              configure_arm_device "s905x2-hg680-fj" "6.6.y_6.612.y" "OPHUB"
               ;; 
               
             # ULO Amlogic devices
