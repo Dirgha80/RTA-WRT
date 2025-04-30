@@ -18,7 +18,7 @@ set -o pipefail # Exit if any command in a pipe fails
 . ./scripts/INCLUDE.sh
 
 # Define constants
-readonly OPHUB_REPO="https://github.com/ophub/amlogic-s9xxx-openwrt/archive/refs/heads/main.zip"
+readonly OPHUB_REPO="https://github.com/Dirgha80/amlogic-s9xxx-openwrt/archive/refs/heads/main.zip"
 readonly ULO_REPO="https://github.com/armarchindo/ULO-Builder/archive/refs/heads/main.zip"
 readonly WORK_DIR="${GITHUB_WORKSPACE:-$(pwd)}/${WORKING_DIR:-}"
 
