@@ -436,7 +436,7 @@ jobs:
               configure_arm_device "s905x4-advan" "6.6.y_6.12.y" "OPHUB"
               ;; 
             "OPHUB Amlogic s905x2 HG680-FJ")
-              configure_arm_device "s905x2-hg680-fj" "6.6.y_6.612.y" "OPHUB"
+              configure_arm_device "s905x2-hg680-fj" "6.6.y" "OPHUB"
               ;; 
               
             # ULO Amlogic devices
