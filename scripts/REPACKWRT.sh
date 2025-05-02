@@ -33,6 +33,10 @@ Arguments:
   -t, --target        Target board name
   -k, --kernel        Kernel version to use
   -tn, --tunnel       Tunnel type
+  -u,--kernelUsage
+  -r,--kernelRepository
+  -a,--Autokernel
+  -s,--Size
 
 Examples:
   repackwrt --OPHUB -t amlogic -k 5.15.100 -tn wireguard
@@ -58,6 +62,11 @@ repackwrt() {
     local target_board=""
     local target_kernel=""
     local tunnel_type=""
+    local kernel_usage=""
+    local kernel_repo=""
+    local auto_kernel=""
+    local img_mb=""
+    
     
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -73,14 +82,54 @@ repackwrt() {
                 target_board="$2"
                 shift 2
                 ;;
-            -k|--kernel)
-                if [[ -z "$2" || "$2" == -* ]]; then
-                    error_msg "Missing argument for $1"
-                    show_usage
-                fi
-                target_kernel="$2"
-                shift 2
-                ;;
+            -r | --kernelRepository)
+            if [[ -n "${2}" ]]; then
+                kernel_repo="${2}"
+                shift
+            else
+                error_msg "Invalid -r parameter [ ${2} ]!"
+            fi
+            ;;
+        -u | --kernelUsage)
+            if [[ -n "${2}" ]]; then
+                kernel_usage="${2//kernel_/}"
+                shift
+            else
+                error_msg "Invalid -u parameter [ ${2} ]!"
+            fi
+            ;;
+        -k | --Kernel)
+            if [[ -n "${2}" ]]; then
+                oldIFS="${IFS}"
+                IFS="_"
+                flippy_kernel=(${2})
+                stable_kernel=(${2})
+                dev_kernel=(${2})
+                beta_kernel=(${2})
+                s905x4_kernel=(${2})
+                specific_kernel=(${2})
+                IFS="${oldIFS}"
+                shift
+            else
+                error_msg "Invalid -k parameter [ ${2} ]!"
+            fi
+            ;;
+        -a | --Autokernel)
+            if [[ -n "${2}" ]]; then
+                auto_kernel="${2}"
+                shift
+            else
+                error_msg "Invalid -a parameter [ ${2} ]!"
+            fi
+            ;;
+        -s | --Size)
+            if [[ -n "${2}" ]]; then
+                img_mb="${2}"
+                shift
+            else
+                error_msg "Invalid -s parameter [ ${2} ]!"
+            fi
+            ;;
             -tn|--tunnel)
                 if [[ -z "$2" || "$2" == -* ]]; then
                     error_msg "Missing argument for $1"
@@ -116,6 +165,26 @@ repackwrt() {
     fi
 
     if [[ -z "$tunnel_type" ]]; then
+        error_msg "Tunnel type (-tn) is required"
+        show_usage
+    fi
+
+    if [[ -z "$kernel_usage" ]]; then
+        error_msg "Builder type (--OPHUB --ophub or --ULO --ulo) is required"
+        show_usage
+    fi
+    
+    if [[ -z "$img_mb" ]]; then
+        error_msg "Target board (-t) is required"
+        show_usage
+    fi
+    
+    if [[ -z "$kernel_repo" ]]; then
+        error_msg "Target kernel (-k) is required"
+        show_usage
+    fi
+
+    if [[ -z "$oldIFS" ]]; then
         error_msg "Tunnel type (-tn) is required"
         show_usage
     fi
