@@ -82,24 +82,24 @@ repackwrt() {
                 target_board="$2"
                 shift 2
                 ;;
-            -r | --kernelRepository)
-            if [[ -n "${2}" ]]; then
+            -r|--kernelRepository)
+            if [[ -z "${2}" ]]; then
                 kernel_repo="${2}"
                 shift
             else
                 error_msg "Invalid -r parameter [ ${2} ]!"
             fi
             ;;
-        -u | --kernelUsage)
-            if [[ -n "${2}" ]]; then
+        -u|--kernelUsage)
+            if [[ -z "${2}" ]]; then
                 kernel_usage="${2//kernel_/}"
                 shift
             else
                 error_msg "Invalid -u parameter [ ${2} ]!"
             fi
             ;;
-        -k | --Kernel)
-            if [[ -n "${2}" ]]; then
+        -k|--Kernel)
+            if [[ -z "${2}" ]]; then
                 oldIFS="${IFS}"
                 IFS="_"
                 flippy_kernel=(${2})
@@ -114,16 +114,16 @@ repackwrt() {
                 error_msg "Invalid -k parameter [ ${2} ]!"
             fi
             ;;
-        -a | --Autokernel)
-            if [[ -n "${2}" ]]; then
+        -a|--Autokernel)
+            if [[ -z "${2}" ]]; then
                 auto_kernel="${2}"
                 shift
             else
                 error_msg "Invalid -a parameter [ ${2} ]!"
             fi
             ;;
-        -s | --Size)
-            if [[ -n "${2}" ]]; then
+        -s|--Size)
+            if [[ -z "${2}" ]]; then
                 img_mb="${2}"
                 shift
             else
