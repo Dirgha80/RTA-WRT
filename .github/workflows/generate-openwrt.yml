@@ -608,7 +608,7 @@ jobs:
           chmod +x scripts/REPACKWRT.sh
           echo "Repacking OpenWrt images ${TYPE}..."
           if [[ "$TYPE" =~ ^(OPHUB|ULO)$ ]]; then
-            ./scripts/REPACKWRT.sh "$TYPE" "$TARGET_BUILD" "$KERNEL" "${{ env.TUNNEL }}"
+            sudo ./remake -b "$TYPE" "$TARGET_BUILD" -k ${{ inputs.openwrt_kernel }} -s ${{ inputs.rootfs_size }} "${{ env.TUNNEL }}"
           fi
           echo "status=success" >> $GITHUB_OUTPUT
 
