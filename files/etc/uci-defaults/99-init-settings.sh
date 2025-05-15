@@ -92,9 +92,9 @@ print_system_info() {
   log "STEP" "==================== SYSTEM INFORMATION ===================="
   log "INFO" "Installed Time: $(date '+%A, %d %B %Y %T')"
   
-  local processor="$(ubus call system board | grep '\"system\"' | sed 's/ \+/ /g' | awk -F'\"' '{print $4}')"
-  local model="$(ubus call system board | grep '\"model\"' | sed 's/ \+/ /g' | awk -F'\"' '{print $4}')"
-  local board="$(ubus call system board | grep '\"board_name\"' | sed 's/ \+/ /g' | awk -F'\"' '{print $4}')"
+  local processor="$(ubus call system board | jsonfilter -e '$.system')"
+  local model="$(ubus call system board | jsonfilter -e '$.model')"
+  local board="$(ubus call system board | jsonfilter -e '$.board_name')"
   local memory="$(free -m | grep Mem | awk '{print $2}') MB"
   local storage="$(df -h / | tail -1 | awk '{print $2}')"
   
@@ -186,7 +186,7 @@ setup_root_password() {
   log "STEP" "Setting up root password securely..."
   
   local PASSWORD="rtawrt"
-  (echo "$PASSWORD"; sleep 1; echo "$PASSWORD") | passwd > /dev/null
+  (echo "$PASSWORD"; sleep 1; echo "$PASSWORD") | passwd root > /dev/null
   check_command "Setting root password"
 }
 
@@ -207,8 +207,11 @@ setup_timezone() {
   
   # Add time sync script to cron if not already present
   if [ -f "/sbin/sync_time.sh" ] && ! grep -q "sync_time.sh" /etc/crontabs/root; then
+    mkdir -p /etc/crontabs
+    touch /etc/crontabs/root
     echo "0 */6 * * * /sbin/sync_time.sh >/dev/null 2>&1" >> /etc/crontabs/root
     log "INFO" "Added time sync script to cron"
+    /etc/init.d/cron restart
   fi
 }
 
@@ -294,39 +297,79 @@ disable_ipv6() {
 setup_wireless() {
   log "STEP" "Configuring wireless networks..."
   
+  # Check if wireless config exists
+  if [ ! -f /etc/config/wireless ]; then
+    log "WARNING" "Wireless configuration not found, running wifi detect..."
+    wifi detect > /etc/config/wireless
+    if [ $? -ne 0 ]; then
+      log "ERROR" "Failed to detect wireless devices"
+      return 1
+    fi
+  fi
+  
   # Backup original wireless config
   cp /etc/config/wireless /etc/config/wireless.bak 2>/dev/null
+  
+  # Check if we have wifi devices configured
+  if ! grep -q "wifi-device" /etc/config/wireless; then
+    log "WARNING" "No wireless devices found in config"
+    return 1
+  fi
   
   safe_uci set "wireless.@wifi-device[0].disabled" "0"
   safe_uci set "wireless.@wifi-iface[0].disabled" "0"
   safe_uci set "wireless.@wifi-iface[0].encryption" "none"
   safe_uci set "wireless.@wifi-device[0].country" "ID"
-  if grep -q "Raspberry Pi 4\|Raspberry Pi 3" /proc/cpuinfo; then
+  
+  # Check for Raspberry Pi and configure accordingly
+  if grep -q "Raspberry Pi 4\|Raspberry Pi 3" /proc/cpuinfo 2>/dev/null; then
     safe_uci set "wireless.@wifi-iface[0].ssid" "RTA-WRT_5G"
     safe_uci set "wireless.@wifi-device[0].channel" "149"
-    safe_uci set "wireless.radio0.htmode" "HT40"
-    safe_uci set "wireless.radio0.band" "5g"
+    safe_uci set "wireless.@wifi-device[0].htmode" "HT40"
+    safe_uci set "wireless.@wifi-device[0].band" "5g"
   else
     safe_uci set "wireless.@wifi-iface[0].ssid" "RTA-WRT_2G"
     safe_uci set "wireless.@wifi-device[0].channel" "1"
     safe_uci set "wireless.@wifi-device[0].band" "2g"
   fi
-  commit_uci wireless
-  wifi reload && wifi up
+  
+  commit_uci "wireless"
+  
+  # Reload wireless with error handling
+  wifi reload
+  if [ $? -ne 0 ]; then
+    log "WARNING" "Error reloading wireless, trying individual up/down"
+    wifi down
+    sleep 2
+    wifi up
+  fi
+  
+  # Check if wireless is working
   if iw dev | grep -q Interface; then
-    if grep -q "Raspberry Pi 4\|Raspberry Pi 3" /proc/cpuinfo; then
-      if ! grep -q "wifi up" /etc/rc.local; then
+    log "INFO" "Wireless interface detected and configured"
+    
+    # For Raspberry Pi, add auto-restart to rc.local and cron
+    if grep -q "Raspberry Pi 4\|Raspberry Pi 3" /proc/cpuinfo 2>/dev/null; then
+      # Add to rc.local if not already present
+      if [ -f "/etc/rc.local" ] && ! grep -q "wifi up" /etc/rc.local; then
+        cp /etc/rc.local /etc/rc.local.bak 2>/dev/null
         sed -i '/exit 0/i # remove if you dont use wireless' /etc/rc.local
         sed -i '/exit 0/i sleep 10 && wifi up' /etc/rc.local
+        log "INFO" "Added wireless restart to rc.local"
       fi
-      if ! grep -q "wifi up" /etc/crontabs/root; then
+      
+      # Add to cron if not already present
+      if ! grep -q "wifi up" /etc/crontabs/root 2>/dev/null; then
+        mkdir -p /etc/crontabs
+        touch /etc/crontabs/root
         echo "# remove if you dont use wireless" >> /etc/crontabs/root
         echo "0 */12 * * * wifi down && sleep 5 && wifi up" >> /etc/crontabs/root
-        service cron restart
+        /etc/init.d/cron restart
+        log "INFO" "Added wireless restart to cron"
       fi
     fi
   else
-    log "INFO" "No wireless device detected."
+    log "WARNING" "No wireless interface detected after configuration"
   fi
 }
 
@@ -335,16 +378,33 @@ setup_package_management() {
   log "STEP" "Setting up package management and repositories..."
   
   # Backup original opkg.conf
-  cp /etc/opkg.conf /etc/opkg.conf.bak
-  
-  # Disable signature check for opkg if not already disabled
-  if grep -q "option check_signature" /etc/opkg.conf; then
-    sed -i 's/option check_signature/# option check_signature/g' /etc/opkg.conf
-    log "INFO" "Disabled package signature verification"
+  if [ -f "/etc/opkg.conf" ]; then
+    cp /etc/opkg.conf /etc/opkg.conf.bak
+    
+    # Disable signature check for opkg if not already disabled
+    if grep -q "option check_signature" /etc/opkg.conf; then
+      sed -i 's/option check_signature/# option check_signature/g' /etc/opkg.conf
+      log "INFO" "Disabled package signature verification"
+    fi
+  else
+    log "WARNING" "opkg.conf not found"
   fi
   
+  # Create customfeeds.conf if it doesn't exist
+  mkdir -p /etc/opkg
+  touch /etc/opkg/customfeeds.conf
+  
   # Add custom repositories if not already added
-  local ARCH=$(grep "OPENWRT_ARCH" /etc/os-release | awk -F '"' '{print $2}')
+  local ARCH=""
+  if [ -f "/etc/os-release" ]; then
+    ARCH=$(grep "OPENWRT_ARCH" /etc/os-release | awk -F '"' '{print $2}')
+  fi
+  
+  if [ -z "$ARCH" ]; then
+    # Try to determine architecture from installed packages
+    ARCH=$(opkg list-installed | grep base-files | awk '{print $3}' | cut -d '_' -f 1)
+  fi
+  
   if [ -n "$ARCH" ]; then
     local CUSTOM_REPO="src/gz custom_packages https://dl.openwrt.ai/latest/packages/${ARCH}/kiddin9"
     
@@ -365,13 +425,13 @@ setup_ui() {
   if [ -d "/www/luci-static/material" ]; then
     safe_uci set "luci.main.mediaurlbase" "/luci-static/material"
     commit_uci "luci"
-    log "INFO" "Set RTAWRT as default theme"
+    log "INFO" "Set MATERIAL as default theme"
     
     # Apply theme customizations if needed
     if [ -f "/usr/share/ucode/luci/template/theme.txt" ]; then
       echo >> /usr/share/ucode/luci/template/header.ut
       cat /usr/share/ucode/luci/template/theme.txt >> /usr/share/ucode/luci/template/header.ut
-      rm -rf /usr/share/ucode/luci/template/material.txt 2>/dev/null
+      rm -rf /usr/share/ucode/luci/template/theme.txt 2>/dev/null
       log "INFO" "Applied theme customizations"
     fi
   else
@@ -381,14 +441,24 @@ setup_ui() {
   # Configure TTYD if installed
   if is_package_installed "ttyd"; then
     log "INFO" "Configuring TTYD..."
+    
+    # Check if ttyd config exists
+    if ! uci show ttyd >/dev/null 2>&1; then
+      touch /etc/config/ttyd
+      uci set ttyd.@ttyd[-1]=ttyd
+      uci set ttyd.@ttyd[-1]=ttyd
+    fi
+    
     safe_uci set "ttyd.@ttyd[0].command" "/bin/bash --login"
     safe_uci set "ttyd.@ttyd[0].interface" "@lan"
     safe_uci set "ttyd.@ttyd[0].port" "7681"
     commit_uci "ttyd"
     
     # Restart TTYD service
-    /etc/init.d/ttyd restart
-    log "INFO" "TTYD configured and restarted"
+    if [ -f "/etc/init.d/ttyd" ]; then
+      /etc/init.d/ttyd restart
+      log "INFO" "TTYD configured and restarted"
+    fi
   fi
 }
 
@@ -430,8 +500,10 @@ setup_usb_modem() {
     commit_uci "xmm-modem"
     
     # Restart the service
-    /etc/init.d/xmm-modem stop
-    log "INFO" "XMM modem service disabled"
+    if [ -f "/etc/init.d/xmm-modem" ]; then
+      /etc/init.d/xmm-modem stop
+      log "INFO" "XMM modem service disabled"
+    fi
   fi
   
   # Load USB modem drivers
@@ -457,6 +529,13 @@ setup_traffic_monitoring() {
     # Create data directory if it doesn't exist
     mkdir -p /etc/nlbwmon
     
+    # Check if nlbwmon config exists
+    if ! uci show nlbwmon >/dev/null 2>&1; then
+      touch /etc/config/nlbwmon
+      uci set nlbwmon.@nlbwmon[-1]=nlbwmon
+      uci set nlbwmon.@nlbwmon[-1]=nlbwmon
+    fi
+    
     safe_uci set "nlbwmon.@nlbwmon[0].database_directory" "/etc/nlbwmon"
     safe_uci set "nlbwmon.@nlbwmon[0].commit_interval" "3h"
     safe_uci set "nlbwmon.@nlbwmon[0].refresh_interval" "30s"
@@ -464,8 +543,10 @@ setup_traffic_monitoring() {
     commit_uci "nlbwmon"
     
     # Restart nlbwmon service
-    /etc/init.d/nlbwmon restart
-    log "INFO" "nlbwmon configured and restarted"
+    if [ -f "/etc/init.d/nlbwmon" ]; then
+      /etc/init.d/nlbwmon restart
+      log "INFO" "nlbwmon configured and restarted"
+    fi
   else
     log "INFO" "nlbwmon not installed, skipping configuration"
   fi
@@ -539,11 +620,13 @@ setup_shell_environment() {
   log "STEP" "Setting up shell environment..."
   
   # Back up original profile
-  cp /etc/profile /etc/profile.bak
-  
-  # Modify banner display
-  sed -i 's/\[ -f \/etc\/banner \] && cat \/etc\/banner/#&/' /etc/profile
-  sed -i 's/\[ -n "$FAILSAFE" \] && cat \/etc\/banner.failsafe/#&/' /etc/profile
+  if [ -f "/etc/profile" ]; then
+    cp /etc/profile /etc/profile.bak
+    
+    # Modify banner display
+    sed -i 's/\[ -f \/etc\/banner \] && cat \/etc\/banner/#&/' /etc/profile
+    sed -i 's/\[ -n "$FAILSAFE" \] && cat \/etc\/banner.failsafe/#&/' /etc/profile
+  fi
   
   # Make utility scripts executable
   for script in /sbin/sync_time.sh /sbin/free.sh /usr/bin/clock /usr/bin/openclash.sh /usr/bin/cek_sms.sh; do
@@ -761,11 +844,6 @@ complete_setup() {
   log "INFO" "Cleaning up and finalizing..."
   rm -rf /root/install2.sh /tmp/* 2>/dev/null
   
-  # Update services
-  /etc/init.d/log restart
-  /etc/init.d/system restart
-  /etc/init.d/network restart
-  
   # Clean up the setup script
   log "INFO" "Removing setup script from auto-start..."
   rm -f /etc/uci-defaults/$(basename $0) 2>/dev/null
@@ -827,4 +905,3 @@ main() {
 
 # Run the main function
 main
-exit 0

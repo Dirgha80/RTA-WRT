@@ -1,5 +1,11 @@
 # What's New!
 
+**Changelog Firmware** (14-05-2025)
+
+- Fix Boot Amlogic HG680P
+- Fix Boot Amlogic B860HV1-V2
+- Fix Modem Manager
+
 **Changelog Firmware** (17-04-2025)
 
 - New OpenWrt Update To 24.10.1

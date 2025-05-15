@@ -171,7 +171,7 @@ repackwrt() {
 
     # Prepare builder directory
     if [[ "${builder_type,,}" == "--ophub" ]]; then
-        mkdir -p "${builder_dir}/openwrt-armvirt"
+        mkdir -p "${builder_dir}/openwrt-armsr"
     else
         mkdir -p "${builder_dir}/rootfs"
     fi
@@ -199,7 +199,7 @@ repackwrt() {
     log "INFO" "Copying rootfs file..."
     local target_path
     if [[ "${builder_type,,}" == "--ophub" ]]; then
-        target_path="${builder_dir}/openwrt-armvirt/${BASE:-openwrt}-armsr-armv8-generic-rootfs.tar.gz"
+        target_path="${builder_dir}/openwrt-armsr/${BASE:-openwrt}-armsr-armv8-generic-rootfs.tar.gz"
     else
         target_path="${builder_dir}/rootfs/${BASE:-openwrt}-armsr-armv8-generic-rootfs.tar.gz"
     fi
@@ -207,6 +207,9 @@ repackwrt() {
     if ! cp -f "${rootfs_file}" "${target_path}"; then
         error_msg "Failed to copy rootfs file"
         exit 1
+    else
+        ls -lh "${target_path}"
+        log "SUCCESS" "Rootfs file copied successfully"
     fi
 
     # Change to builder directory

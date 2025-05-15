@@ -1,222 +1,256 @@
 #!/usr/bin/env bash
 
-ls -lh
+# Set strict error handling
+set -euo pipefail
+IFS=$'\n\t'
 
-BOT_TOKEN="${BOT_TOKEN}"
-CHAT_ID="${CHAT_ID}"
-THREAD_ID="734"
+# Script configuration
+readonly BOT_TOKEN="${BOT_TOKEN:?'BOT_TOKEN is required'}"
+readonly CHAT_ID="${CHAT_ID:?'CHAT_ID is required'}"
+readonly THREAD_ID="${THREAD_ID:-734}"  # Default to 734 if not set
 
-# Build parameters
-SOURCE="${SOURCE}"
-VERSION="${VERSION}"
-BUILD_TYPE="${BUILD_TYPE}"
-FOR="${FOR}"
-RELEASE_TAG="${RELEASE_TAG}"
+# Build configuration
+readonly SOURCE="${SOURCE:?'SOURCE is required'}"
+readonly VERSION="${VERSION:?'VERSION is required'}"
+readonly BUILD_TYPE="${BUILD_TYPE:?'BUILD_TYPE is required'}"
+readonly FOR="${FOR:?'FOR is required'}"
+readonly RELEASE_TAG="${RELEASE_TAG:-}"  # Optional
 
-# Set image URL based on source
-if [ "$SOURCE" = "immortalwrt" ]; then
-    image_url="https://avatars.githubusercontent.com/u/53193414?s=200&v=4"
-else
-    image_url="https://avatars.githubusercontent.com/u/2528830?s=200&v=4"
-fi
+# Constants
+readonly MAX_RETRIES=3
+readonly RETRY_DELAY=2
+readonly MAX_BUTTONS_PER_BATCH=20
+readonly ARTIFACTS_FILE="combined_artifacts.txt"
 
- # Generate message based on branch
-if [ "$FOR" = "main" ]; then
-    message="━━━━━━━━━━━━━━━━━━━━━━
+# Logging functions
+log_info() {
+    echo "ℹ️ [INFO] $*"
+}
+
+log_warning() {
+    echo "⚠️ [WARNING] $*"
+    echo "::warning::$*"
+}
+
+log_error() {
+    echo "❌ [ERROR] $*"
+    echo "::error::$*"
+    return 1
+}
+
+# Helper functions
+get_image_url() {
+    case "$SOURCE" in
+        "immortalwrt")
+            echo "https://avatars.githubusercontent.com/u/53193414?s=200&v=4"
+            ;;
+        *)
+            echo "https://avatars.githubusercontent.com/u/2528830?s=200&v=4"
+            ;;
+    esac
+}
+
+generate_message() {
+    local current_date
+    current_date=$(date '+%d-%m-%Y %H:%M:%S')
+    
+    if [ "$FOR" = "main" ]; then
+        cat << EOF
+━━━━━━━━━━━━━━━━━━━━━━
 🎯 *RTA-WRT Firmware Update*
 ✅ _Stable Release_
 
 🔹 *Version:* ${SOURCE}:${VERSION}
-🔹 *Date:* $(date '+%d-%m-%Y %H:%M:%S')
+🔹 *Date:* ${current_date}
 🔹 *Build Type:* ${BUILD_TYPE}
 
- 📌 *Release Notes:*
+📌 *Release Notes:*
 • Stable version release
 • Recommended for all users
 • Includes latest features and bug fixes
-━━━━━━━━━━━━━━━━━━━━━━"
-else
-    message="━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━
+EOF
+    else
+        cat << EOF
+━━━━━━━━━━━━━━━━━━━━━━
 🚀 *RTA-WRT Firmware Update*
 🌟 _Development Release_
 
 🔹 *Version:* ${SOURCE}:${VERSION}
-🔹 *Date:* $(date '+%d-%m-%Y %H:%M:%S')
+🔹 *Date:* ${current_date}
 🔹 *Build Type:* ${BUILD_TYPE}
 
- 📌 *Development Notes:*
+📌 *Development Notes:*
 • Suitable for testing
 • Please provide feedback
 • Report any bugs found
 • Your feedback helps development
-━━━━━━━━━━━━━━━━━━━━━━"
-fi
-
- # Collect all buttons into an array
-declare -a ALL_BUTTONS
-button_count=0
-
- # Validate and parse the artifacts file
-echo "Parsing artifact links..."
-while IFS='|' read -r target_name file_url || [[ -n "$target_name" ]]; do
-    target_name=$(echo "$target_name" | xargs)
-    file_url=$(echo "$file_url" | xargs)
-
-     if [[ -n "$target_name" && -n "$file_url" ]]; then
-        # Validate URL format to prevent errors (basic check)
-        if [[ "$file_url" =~ ^https?:// ]]; then
-            ALL_BUTTONS+=("$target_name" "$file_url")
-            ((button_count++))
-        else
-            echo "::warning::Skipping invalid URL format: $file_url"
-        fi
+━━━━━━━━━━━━━━━━━━━━━━
+EOF
     fi
-done < combined_artifacts.txt
+}
 
- # Check if we have any buttons
-if [ $button_count -eq 0 ]; then
-    echo "::warning::No valid download links found in artifacts file"
-fi
-
- # Add a button to view the release
-if [ -n "$RELEASE_TAG" ]; then
-    ALL_BUTTONS+=("View Release" "https://github.com/rizkikotet-dev/RTA-WRT/releases/tag/$RELEASE_TAG")
-    ((button_count++))
-    echo "Added release button: View Release -> $RELEASE_TAG"
-else
-    echo "::warning::Release tag is empty, skipping View Release button"
-fi
-
- echo "Total buttons: $button_count"
-
- # Send the initial message with photo
-echo "Sending main message with photo..."
-for attempt in {1..3}; do
-    response=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto" \
-        --data-urlencode "chat_id=${CHAT_ID}" \
-        --data-urlencode "message_thread_id=${THREAD_ID}" \
-        --data-urlencode "photo=${image_url}" \
-        --data-urlencode "caption=${message}" \
-        --data-urlencode "parse_mode=Markdown")
-
-     # Check if the message was sent successfully
-    if [[ $(echo "$response" | jq -r '.ok') == "true" ]]; then
-        # Get the message ID of the sent message
-        message_id=$(echo "$response" | jq -r '.result.message_id')
-        echo "Main message sent successfully with ID: $message_id"
-        break
-    else
+# Function to make HTTP requests with retry logic
+make_telegram_request() {
+    local endpoint=$1
+    local data=$2
+    local attempt=1
+    local max_attempts=$MAX_RETRIES
+    
+    while [ $attempt -le $max_attempts ]; do
+        local response
+        response=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/${endpoint}" \
+                       --data-urlencode "$data")
+        
+        if [ "$(echo "$response" | jq -r '.ok')" = "true" ]; then
+            echo "$response"
+            return 0
+        fi
+        
+        local error_code
+        local error_desc
         error_code=$(echo "$response" | jq -r '.error_code')
         error_desc=$(echo "$response" | jq -r '.description')
-        echo "Attempt $attempt failed to send initial message: Code $error_code - $error_desc"
         
-        if [ $attempt -lt 3 ]; then
-            sleep_time=$((attempt * 3))
-            echo "Retrying in $sleep_time seconds..."
-            sleep $sleep_time
+        if [ $attempt -lt $max_attempts ]; then
+            if [ "$error_code" = "429" ]; then
+                local retry_after
+                retry_after=$(echo "$response" | jq -r '.parameters.retry_after // 5')
+                log_warning "Rate limited. Waiting ${retry_after}s before retry ${attempt}/${max_attempts}"
+                sleep "$retry_after"
+            else
+                local wait_time=$((RETRY_DELAY * attempt))
+                log_warning "Request failed (${error_code}: ${error_desc}). Retrying in ${wait_time}s..."
+                sleep "$wait_time"
+            fi
         else
-            echo "::error::Failed to send initial message after 3 attempts"
-            exit 1
+            log_error "Failed after ${max_attempts} attempts: ${error_desc}"
+            return 1
         fi
-    fi
-done
+        
+        ((attempt++))
+    done
+}
 
- # Function to send buttons in batches with retry mechanism
+# Function to validate and parse artifacts
+parse_artifacts() {
+    local artifacts_file=$1
+    local -n buttons_ref=$2
+    local count=0
+    
+    [ -f "$artifacts_file" ] || log_error "Artifacts file not found: $artifacts_file"
+    
+    while IFS='|' read -r target_name file_url || [[ -n "$target_name" ]]; do
+        target_name=$(echo "$target_name" | xargs)
+        file_url=$(echo "$file_url" | xargs)
+        
+        if [[ -n "$target_name" && -n "$file_url" ]]; then
+            if [[ "$file_url" =~ ^https?:// ]]; then
+                buttons_ref+=("$target_name" "$file_url")
+                ((count++))
+            else
+                log_warning "Invalid URL format: $file_url"
+            fi
+        fi
+    done < "$artifacts_file"
+    
+    return $count
+}
+
+# Function to send button batches
 send_buttons_batch() {
-    local start=$1
-    local end=$2
+    local -n buttons=$1
+    local message_id=$2
     local batch_num=$3
-    local max_retries=3
-    local retry_delay=2
+    local start=$4
+    local end=$5
+    
     local buttons_json='[]'
     
     for ((i=start; i<end; i+=2)); do
-        if [[ $i -ge ${#ALL_BUTTONS[@]} ]]; then
+        if [[ $i -ge ${#buttons[@]} ]]; then
             break
         fi
         
-        local name="${ALL_BUTTONS[i]}"
-        local url="${ALL_BUTTONS[i+1]}"
+        local name="${buttons[i]}"
+        local url="${buttons[i+1]}"
         
-        # For View Release button, add a special emoji
-        if [[ "$name" == "View Release" ]]; then
-            name="🔗 View Release"
-        else
-            name="📥 $name"
-        fi
+        # Add emoji based on button type
+        name=$([ "$name" = "View Release" ] && echo "🔗 View Release" || echo "📥 $name")
         
         buttons_json=$(echo "$buttons_json" | jq --arg name "$name" --arg url "$url" \
-            '. += [[{"text": $name, "url": $url}]]')
+            '. += [[{\"text\": $name, \"url\": $url}]]')
     done
     
-    # Debug message
-    echo "Preparing buttons batch ${batch_num}: ${start}-${end}"
+    log_info "Sending buttons batch ${batch_num}..."
     
-    # Send the buttons with retry
-    local attempts=0
-    local success=false
+    local data="chat_id=${CHAT_ID}&message_thread_id=${THREAD_ID}"
+    data+="&text=📦 *Download Options (Group ${batch_num})*"
+    data+="&parse_mode=Markdown"
+    data+="&reply_to_message_id=${message_id}"
+    data+="&reply_markup={\"inline_keyboard\":$(echo "$buttons_json" | jq -c)}"
     
-    while [[ $attempts -lt $max_retries && $success == false ]]; do
-        ((attempts++))
-        echo "Sending batch ${batch_num}, attempt ${attempts}..."
-        
-        local batch_response=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-            --data-urlencode "chat_id=${CHAT_ID}" \
-            --data-urlencode "message_thread_id=${THREAD_ID}" \
-            --data-urlencode "text=📦 *Download Options (Group ${batch_num})*" \
-            --data-urlencode "parse_mode=Markdown" \
-            --data-urlencode "reply_to_message_id=${message_id}" \
-            --data-urlencode "reply_markup={\"inline_keyboard\":$(echo "$buttons_json" | jq -c)}")
-        
-        # Check if successful
-        if [[ $(echo "$batch_response" | jq -r '.ok') == "true" ]]; then
-            echo "Batch ${batch_num} sent successfully!"
-            success=true
-        else
-            local error_code=$(echo "$batch_response" | jq -r '.error_code')
-            local error_desc=$(echo "$batch_response" | jq -r '.description')
-            echo "Failed to send batch ${batch_num}: Code ${error_code} - ${error_desc}"
-            
-            # If we hit rate limiting, wait longer
-            if [[ $error_code == 429 ]]; then
-                local retry_after=$(echo "$batch_response" | jq -r '.parameters.retry_after // 5')
-                echo "Rate limited. Waiting for ${retry_after} seconds before retrying..."
-                sleep $retry_after
-            elif [[ $attempts -lt $max_retries ]]; then
-                echo "Retrying in ${retry_delay} seconds..."
-                sleep $retry_delay
-                # Exponential backoff
-                retry_delay=$((retry_delay * 2))
-            fi
-        fi
-    done
-    
-    if [[ $success == false ]]; then
-        echo "::warning::Failed to send batch ${batch_num} after ${max_retries} attempts."
+    if ! make_telegram_request "sendMessage" "$data"; then
+        log_error "Failed to send button batch ${batch_num}"
+        return 1
     fi
     
-    # Add delay between batches to avoid rate limiting
+    # Prevent rate limiting
     sleep 2
+    return 0
 }
 
- # Calculate how many button groups we need (20 buttons per message)
-# Each button takes 2 elements in the array (name and URL)
-total_elements=${#ALL_BUTTONS[@]}
-max_buttons_per_batch=40  # 20 buttons = 40 elements in array
-batch_count=$(( (total_elements + max_buttons_per_batch - 1) / max_buttons_per_batch ))
-
- echo "Will send buttons in ${batch_count} batches"
-
- # Send buttons in batches of 20
-batch_num=1
-for ((i=0; i<total_elements; i+=max_buttons_per_batch)); do
-    end=$((i + max_buttons_per_batch))
-    if ((end > total_elements)); then
-        end=$total_elements
+main() {
+    # Initialize buttons array
+    declare -a ALL_BUTTONS
+    
+    # Parse artifacts and populate buttons
+    local button_count
+    button_count=$(parse_artifacts "$ARTIFACTS_FILE" ALL_BUTTONS) || exit 1
+    
+    # Add release button if tag is provided
+    if [ -n "$RELEASE_TAG" ]; then
+        ALL_BUTTONS+=("View Release" "https://github.com/rizkikotet-dev/RTA-WRT/releases/tag/$RELEASE_TAG")
+        ((button_count++))
+        log_info "Added release button for tag: $RELEASE_TAG"
     fi
     
-    send_buttons_batch $i $end $batch_num
-    ((batch_num++))
-done
+    log_info "Preparing to send notification with ${button_count} buttons"
+    
+    # Send main message with photo
+    local message
+    message=$(generate_message)
+    
+    local data="chat_id=${CHAT_ID}&message_thread_id=${THREAD_ID}"
+    data+="&photo=$(get_image_url)"
+    data+="&caption=${message}"
+    data+="&parse_mode=Markdown"
+    
+    local response
+    response=$(make_telegram_request "sendPhoto" "$data") || exit 1
+    
+    local message_id
+    message_id=$(echo "$response" | jq -r '.result.message_id')
+    log_info "Main message sent successfully with ID: $message_id"
+    
+    # Send buttons in batches
+    local total_elements=${#ALL_BUTTONS[@]}
+    local elements_per_batch=$((MAX_BUTTONS_PER_BATCH * 2))
+    local batch_count=$(( (total_elements + elements_per_batch - 1) / elements_per_batch ))
+    
+    log_info "Sending buttons in ${batch_count} batches"
+    
+    local batch_num=1
+    for ((i=0; i<total_elements; i+=elements_per_batch)); do
+        local end=$((i + elements_per_batch))
+        [[ $end -gt $total_elements ]] && end=$total_elements
+        
+        send_buttons_batch ALL_BUTTONS "$message_id" "$batch_num" "$i" "$end" || exit 1
+        ((batch_num++))
+    done
+    
+    log_info "✅ Telegram notification sent successfully!"
+}
 
-echo "✅ Telegram notification sent successfully!"
+# Execute main function
+main "$@"

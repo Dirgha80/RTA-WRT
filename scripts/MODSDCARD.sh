@@ -6,10 +6,6 @@ if [[ ! -f "./scripts/INCLUDE.sh" ]]; then
     exit 1
 fi
 
-set -o errexit  # Exit on error
-set -o nounset  # Exit on unset variables
-set -o pipefail # Exit if any command in a pipe fails
-
 . ./scripts/INCLUDE.sh
 
 build_mod_sdcard() {
@@ -89,10 +85,14 @@ build_mod_sdcard() {
 
     # Update dtb & root param
     log "INFO" "Patching uEnv/extlinux/boot.ini..."
-    local uenv_root=$(grep -oP 'root=\S+' boot/uEnv.txt | cut -d= -f2)
-    sudo sed -i "s|root=\S*|root=$uenv_root|g" boot/extlinux/extlinux.conf
-    sudo sed -i "s|dtb_name=.*|dtb_name=$dtb|g" boot/uEnv.txt
-    sudo sed -i "s|meson.*\.dtb|$dtb|g" boot/boot.ini boot/extlinux/extlinux.conf
+    local uenv=$(sudo cat boot/uEnv.txt | grep APPEND | awk -F "root=" '{print $2}')
+    local extlinux=$(sudo cat boot/extlinux/extlinux.conf | grep append | awk -F "root=" '{print $2}')
+    local boot=$(sudo cat boot/boot.ini | grep dtb | awk -F "/" '{print $4}' | cut -d'"' -f1)
+
+    sudo sed -i "s|$extlinux|$uenv|g" boot/extlinux/extlinux.conf
+    sudo sed -i "s|$boot|$dtb|g" boot/boot.ini
+    sudo sed -i "s|$boot|$dtb|g" boot/extlinux/extlinux.conf
+    sudo sed -i "s|$boot|$dtb|g" boot/uEnv.txt
 
     sync
     sudo umount boot
